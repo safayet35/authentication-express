@@ -1,0 +1,24 @@
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE and Editor folders
+.vscode/
+.idea/
+*.swp
+
+# Environment and secret files (DO NOT COMMIT THESE)
+.env
+*.pem
+credentials.json
+
+# Logs and temporary files
+*.log
+npm-debug.log*
+tmp/
+
+# Common dependency and build directories
+node_modules/
+dist/
+build/
+venv/
