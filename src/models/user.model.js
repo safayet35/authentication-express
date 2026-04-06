@@ -28,7 +28,7 @@ const userSchema = new Schema(
 			type: Boolean,
 			default: false
 		},
-		isTwoFactorEnabled: {
+		twoFactorEnabled: {
 			type: Boolean,
 			default: false
 		},
