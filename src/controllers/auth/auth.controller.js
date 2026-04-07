@@ -4,7 +4,7 @@ import { registerSchema, loginSchema } from "./auth.schema.js";
 import { hashPassword, checkPassword } from "../../lib/hash.js";
 import { _config } from "../../config/_config.js";
 import { sendEmail } from "../../lib/email.js";
-import { createAccessToken, createRefreshToken } from "../../lib/token.js";
+import { createAccessToken, createRefreshToken, verifyRefreshToken } from "../../lib/token.js";
 function getAppUrl() {
 	return _config.appUrl || `http://localhost:${_config.port}`;
 }
@@ -179,7 +179,7 @@ export const loginHandler = async (req, res) => {
 		// check production or not
 		const isProd = _config.isProduction === "production";
 
-		res.cookie("refreshToken", {
+		res.cookie("refreshToken", refreshToken, {
 			httpOnly: true,
 			secure: isProd,
 			sameSite: "lax",
@@ -203,4 +203,84 @@ export const loginHandler = async (req, res) => {
 			message: "Internal server error"
 		});
 	}
+};
+
+export const refreshHandler = async (req, res) => {
+	try {
+		// check the token has or not
+		const token = req.cookies?.refreshToken || undefined;
+
+		if (!token) {
+			return res.status(401).json({
+				message: "Token is missing"
+			});
+		}
+
+		// verifying the refresh token
+		const payload = await verifyRefreshToken(token);
+
+		if (!payload) {
+			return res.status(401).json({
+				message: "Expired token"
+			});
+		}
+
+		// find the user from db
+	
+		const user = await User.findById(payload.id);
+
+		if (!user) {
+			return res.status(401).json({
+				message: "User not found!"
+			});
+		}
+
+		// check tokenVersion
+
+		if (user.tokenVersion !== payload.tokenVersion) {
+			return res.status(401).json({
+				message: "Refresh token invalidate"
+			});
+		}
+		// creating new access and refresh token
+		const newAccessToken = await createAccessToken(user._id, user.role, user.tokenVersion);
+
+		const newRefreshToken = await createRefreshToken(user._id, user.tokenVersion);
+
+		const isProd = _config.isProduction === "production";
+
+		// finally set on cookie and send response back
+
+		res.cookie("refreshToken", newRefreshToken, {
+			httpOnly: true,
+			secure: isProd,
+			sameSite: "lax",
+			maxAge: 7 * 24 * 60 * 60 * 1000
+		});
+
+		return res.status(200).json({
+			message: "Token refreshed",
+			accessToken: newAccessToken,
+			user: {
+				id: user._id,
+				email: user.email,
+				role: user.role,
+				isEmailVerified: user.isEmailVerified,
+				twoFactorEnabled: user.twoFactorEnabled
+			}
+		});
+	} catch (error) {
+		console.log(error);
+		return res.status(500).json({
+			message: "Internal server error"
+		});
+	}
+};
+
+export const logoutHandler = async (req, res) => {
+	res.clearCookie("refreshToken", { path: "/" });
+
+	res.status(200).json({
+		message: "Logout successfully"
+	});
 };
