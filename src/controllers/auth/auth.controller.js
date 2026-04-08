@@ -5,6 +5,8 @@ import { hashPassword, checkPassword } from "../../lib/hash.js";
 import { _config } from "../../config/_config.js";
 import { sendEmail } from "../../lib/email.js";
 import { createAccessToken, createRefreshToken, verifyRefreshToken } from "../../lib/token.js";
+import crypto from "crypto";
+
 function getAppUrl() {
 	return _config.appUrl || `http://localhost:${_config.port}`;
 }
@@ -89,6 +91,7 @@ export const registerHandler = async (req, res) => {
 
 export const verifyEmailHandler = async (req, res) => {
 	try {
+		// get the token from query
 		const token = req.query.token;
 
 		if (!token) {
@@ -96,7 +99,7 @@ export const verifyEmailHandler = async (req, res) => {
 				message: "token in missing"
 			});
 		}
-
+		// verify the token
 		const payload = jwt.verify(token, _config.jwtAccessSecret);
 
 		const user = await User.findById(payload.id);
@@ -226,7 +229,7 @@ export const refreshHandler = async (req, res) => {
 		}
 
 		// find the user from db
-	
+
 		const user = await User.findById(payload.id);
 
 		if (!user) {
@@ -283,4 +286,53 @@ export const logoutHandler = async (req, res) => {
 	res.status(200).json({
 		message: "Logout successfully"
 	});
+};
+
+export const forgetPasswordHandler = async (req, res) => {
+	try {
+		const { email } = req.body;
+
+		if (!email) {
+			return res.status(401).json({ message: "Email is required" });
+		}
+
+		const normalizedEmail = email.toLowerCase().trim();
+
+		const user = await User.findOne({ email: normalizedEmail });
+
+		if (!user) {
+			return res.status(200).json({ message: "If an account with this email exist, we will send you a reset link" });
+		}
+
+		const rawToken = crypto.randomBytes(32).toString("hex");
+
+		const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+		user.resetPasswordToken = tokenHash;
+		user.resetPasswordExpiry = new Date(Date.now() + 15 * 60 * 1000);
+
+		await user.save();
+
+		const resetUrl = `${getAppUrl()}/auth/reset-password?token=${tokenHash}`;
+
+		await sendEmail(
+			user.email,
+			"Reset your password",
+
+			`<div>
+			<p>With this link reset your password: </p>
+<a href="${resetUrl}">${resetUrl}</a>
+			
+			</div>
+			`
+		);
+
+		return res.status(200).json({ message: "If an account with this email exist, we will send you a reset link" });
+	} catch (error) {
+	   
+	   return res.status(500).json({
+			message: "Internal server error"
+		});
+	   
+	}
 };
